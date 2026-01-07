@@ -1,0 +1,69 @@
+name: 论语每日推送
+
+on:
+  schedule:
+    # 每天UTC 0点执行（北京时间8点）
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  send-lunyu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 获取论语网页
+        id: fetch
+        run: |
+          HTML=$(curl -s http://www.lunyu8.cn/)
+          echo "html<<EOF" >> $GITHUB_OUTPUT
+          echo "$HTML" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: 解析并选择篇章
+        id: parse
+        run: |
+          # 论语二十篇列表
+          chapters=("学而篇" "为政篇" "八佾篇" "里仁篇" "公冶长篇" "雍也篇" "述而篇" "泰伯篇" "子罕篇" "乡党篇" "先进篇" "颜渊篇" "子路篇" "宪问篇" "卫灵公篇" "季氏篇" "阳货篇" "微子篇" "子张篇" "尧曰篇")
+          
+          # 计算今天是第几天
+          day_of_year=$(date +%j)
+          chapter_index=$(( ($day_of_year - 1) % 20 ))
+          selected_chapter=${chapters[$chapter_index]}
+          
+          echo "chapter_name=$selected_chapter" >> $GITHUB_OUTPUT
+          echo "chapter_index=$((chapter_index + 1))" >> $GITHUB_OUTPUT
+          
+          # 提取篇章内容（简化版，实际可能需要更复杂的解析）
+          content=$(echo "${{ steps.fetch.outputs.html }}" | grep -A 100 "论语·${selected_chapter}注音版" | head -50 | sed 's/<[^>]*>//g' | tr -d '\n' | sed 's/  */ /g')
+          
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: 发送邮件
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.126.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: 论语每日推送 - ${{ steps.parse.outputs.chapter_name }}
+          to: qhdhao@126.com
+          from: qhdhao@126.com
+          body: |
+            📚 论语每日推送 - ${{ steps.parse.outputs.chapter_name }}
+            
+            ${{ steps.parse.outputs.content }}
+            
+            ---
+            来源：论语网 (http://www.lunyu8.cn/)
+      
+      - name: 发送到微信（Server酱）
+        if: ${{ secrets.SERVERCHAN_SENDKEY != '' }}
+        run: |
+          curl -X POST "https://sct.ftqq.com/${{ secrets.SERVERCHAN_SENDKEY }}.send" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"title\": \"论语每日推送 - ${{ steps.parse.outputs.chapter_name }}\",
+              \"desp\": \"${{ steps.parse.outputs.content }}\"
+            }"
+
