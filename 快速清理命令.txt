@@ -1,0 +1,16 @@
+# 快速清理命令 - 复制到终端执行
+
+# 1. 清空废纸篓（立即释放空间）
+rm -rf ~/.Trash/*
+
+# 2. 清理下载文件夹中的临时文件
+find ~/Downloads -name "*.tmp" -delete
+find ~/Downloads -name "*.log" -delete  
+find ~/Downloads -name ".DS_Store" -delete
+
+# 3. 清理用户缓存（安全）
+rm -rf ~/Library/Caches/*
+
+# 4. 查看清理后的空间
+df -h /
+

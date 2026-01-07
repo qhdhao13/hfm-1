@@ -1,0 +1,143 @@
+{
+  "name": "论语每日推送",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "每天8点触发",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://www.lunyu8.cn/",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-request",
+      "name": "获取论语网页",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 论语二十篇的标题列表\nconst chapters = [\n  '学而篇',\n  '为政篇',\n  '八佾篇',\n  '里仁篇',\n  '公冶长篇',\n  '雍也篇',\n  '述而篇',\n  '泰伯篇',\n  '子罕篇',\n  '乡党篇',\n  '先进篇',\n  '颜渊篇',\n  '子路篇',\n  '宪问篇',\n  '卫灵公篇',\n  '季氏篇',\n  '阳货篇',\n  '微子篇',\n  '子张篇',\n  '尧曰篇'\n];\n\n// 获取当前日期，计算今天是今年的第几天\nconst today = new Date();\nconst dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);\n// 20篇论语，循环选择（0-19）\nconst chapterIndex = dayOfYear % 20;\nconst selectedChapter = chapters[chapterIndex];\n\n// 获取网页内容\nconst htmlContent = $input.item.json.data || $input.item.json.body || '';\n\n// 使用正则表达式提取对应篇章的内容\n// 查找篇章标题和内容\nconst chapterRegex = new RegExp(`## 论语·${selectedChapter}注音版([\\\\s\\\\S]*?)(?=## 论语·|$)`, 'i');\nconst match = htmlContent.match(chapterRegex);\n\nlet chapterContent = '';\nif (match && match[1]) {\n  // 提取篇章内容，清理HTML标签\n  chapterContent = match[1]\n    .replace(/<[^>]+>/g, '') // 移除HTML标签\n    .replace(/\\\\s+/g, ' ') // 合并多个空格\n    .trim();\n  \n  // 如果内容太长，截取前2000字符\n  if (chapterContent.length > 2000) {\n    chapterContent = chapterContent.substring(0, 2000) + '...';\n  }\n} else {\n  chapterContent = `未能找到${selectedChapter}的内容，请检查网页结构。`;\n}\n\n// 构建最终消息\nconst message = `📚 论语每日推送 - ${selectedChapter}\\n\\n${chapterContent}\\n\\n---\\n来源：论语网 (http://www.lunyu8.cn/)`;\n\nreturn {\n  json: {\n    chapterName: selectedChapter,\n    chapterIndex: chapterIndex + 1,\n    dayOfYear: dayOfYear,\n    content: chapterContent,\n    message: message,\n    date: today.toISOString().split('T')[0]\n  }\n};"
+      },
+      "id": "parse-content",
+      "name": "解析并选择篇章",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=YOUR_WECHAT_WEBHOOK_URL",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({msgtype: 'text', text: {content: $json.message}}) }}",
+        "options": {}
+      },
+      "id": "wechat-webhook",
+      "name": "发送到微信（企业微信Webhook）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "notes": "需要配置企业微信机器人Webhook URL，或使用Server酱、PushPlus等第三方服务"
+    },
+    {
+      "parameters": {
+        "fromEmail": "qhdhao@126.com",
+        "toEmail": "qhdhao@126.com",
+        "subject": "=论语每日推送 - {{ $json.chapterName }}",
+        "text": "={{ $json.message }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "发送邮件",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 400],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credentials",
+          "name": "SMTP邮箱凭据"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "每天8点触发": {
+      "main": [
+        [
+          {
+            "node": "获取论语网页",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取论语网页": {
+      "main": [
+        [
+          {
+            "node": "解析并选择篇章",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析并选择篇章": {
+      "main": [
+        [
+          {
+            "node": "发送到微信（企业微信Webhook）",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "发送邮件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-07T15:40:00.000Z",
+  "versionId": "1"
+}
